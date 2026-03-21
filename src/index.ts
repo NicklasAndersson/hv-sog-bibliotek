@@ -34,15 +34,6 @@ async function listBucket(bucket: R2Bucket, options?: R2ListOptions): Promise<R2
     };
 }
 
-function generateSitemap(domain: string, objects: R2Object[], decodeURI: boolean): string {
-    const urls = objects.map((obj) => {
-        const key = decodeURI ? encodeURIComponent(obj.key).replace(/%2F/g, '/') : obj.key;
-        const lastmod = obj.uploaded.toISOString().split('T')[0];
-        return `  <url>\n    <loc>https://${domain}/${key}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`;
-    });
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`;
-}
-
 function shouldReturnOriginResponse(originResponse: Response, siteConfig: SiteConfig): boolean {
     const isNotEndWithSlash = originResponse.url.slice(-1) !== '/';
     const is404 = originResponse.status === 404;
@@ -94,22 +85,6 @@ export default {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Cache-Control': 'public, max-age=86400',
-                },
-            });
-        }
-
-        // Serve sitemap.xml without auth
-        if (url.pathname === '/sitemap.xml') {
-            const siteConfig = getSiteConfig(env, domain);
-            if (!siteConfig) {
-                return new Response('Not found', { status: 404 });
-            }
-            const index = await listBucket(siteConfig.bucket);
-            const xml = generateSitemap(domain, index.objects, siteConfig.decodeURI ?? false);
-            return new Response(xml, {
-                headers: {
-                    'Content-Type': 'application/xml; charset=utf-8',
-                    'Cache-Control': 'public, max-age=3600',
                 },
             });
         }
