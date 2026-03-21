@@ -113,8 +113,12 @@ export default {
 
         // Handle search (public, no auth required)
         const searchQuery = url.searchParams.get('q');
-        if (searchQuery && searchQuery.trim() !== '') {
+        if (searchQuery !== null) {
             const query = searchQuery.trim();
+            if (query === '') {
+                // Empty search query — redirect to root
+                return Response.redirect(new URL('/', url).toString(), 302);
+            }
             const bucket = siteConfig.bucket;
             const index = await listBucket(bucket, {
                 include: ['httpMetadata', 'customMetadata'],
