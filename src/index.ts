@@ -88,6 +88,16 @@ export default {
         const url = new URL(request.url);
         const domain = url.hostname;
 
+        // Serve robots.txt
+        if (url.pathname === '/robots.txt') {
+            return new Response('User-agent: *\nDisallow: /\n', {
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Cache-Control': 'public, max-age=86400',
+                },
+            });
+        }
+
         // Serve sitemap.xml without auth
         if (url.pathname === '/sitemap.xml') {
             const siteConfig = getSiteConfig(env, domain);
