@@ -54,7 +54,16 @@ The worker sits in front of an R2 bucket via a custom domain. It intercepts resp
 
 Otherwise, the original R2 response is returned unchanged — normal object access is unaffected.
 
-The worker also implements Basic Auth to restrict access.
+### Authentication
+
+Browsing directories and searching are **public** — no login required. **File downloads** (any path not ending in `/`) are protected by Basic Auth. Credentials are stored as Wrangler secrets:
+
+```bash
+npx wrangler secret put AUTH_USERNAME
+npx wrangler secret put AUTH_PASSWORD
+```
+
+When a user clicks a file link, the browser prompts for credentials. Once entered, the browser caches them for the session.
 
 ### Search
 
