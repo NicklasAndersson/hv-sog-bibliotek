@@ -56,6 +56,10 @@ Otherwise, the original R2 response is returned unchanged — normal object acce
 
 The worker also implements Basic Auth to restrict access.
 
+### Search
+
+Every directory listing page includes a search bar in the header. Submitting a query performs a **full-bucket server-side search** — the worker lists all objects in the R2 bucket and filters by case-insensitive substring match against file/folder names and `desp` descriptions. Results are displayed as a flat list with full paths.
+
 ## Project Structure
 
 | File | Purpose |
@@ -63,5 +67,5 @@ The worker also implements Basic Auth to restrict access.
 | `src/index.ts` | Worker entry point — auth, origin fetch, redirect, R2 listing |
 | `src/config.ts` | Per-domain site configuration (**gitignored**) |
 | `src/types.ts` | TypeScript types (`Env`, `SiteConfig`) |
-| `src/render.ts` | HTML template rendering (directory listing page) |
+| `src/render.ts` | HTML template rendering (directory listing, search results) |
 | `src/static.ts` | Inlined SVG icons and CSS |

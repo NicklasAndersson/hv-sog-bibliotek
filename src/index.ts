@@ -1,5 +1,5 @@
 import { Env, SiteConfig } from './types';
-import { renderTemplFull } from './render';
+import { renderTemplFull, renderSearchResults } from './render';
 import { getSiteConfig } from './config';
 
 async function listBucket(bucket: R2Bucket, options?: R2ListOptions): Promise<R2Objects> {
@@ -63,7 +63,7 @@ function shouldReturnOriginResponse(originResponse: Response, siteConfig: SiteCo
  * @param {string} authorization
  * @returns {string[]}
  */
-function parseCredentials(authorization) {
+function parseCredentials(authorization: string) {
     const parts = authorization.split(' ')
     const plainAuth = atob(parts[1])
     const credentials = plainAuth.split(':')
@@ -74,7 +74,7 @@ function parseCredentials(authorization) {
    * @param {string} message
    * @returns {Response}
    */
-  function getUnauthorizedResponse(message) {
+  function getUnauthorizedResponse(message: string) {
     let response = new Response(message, {
       status: 401,
     })
@@ -104,30 +104,78 @@ export default {
             });
         }
 
-        const authorization = request.headers.get('authorization')
-        if (!request.headers.has('authorization')) {
-            return getUnauthorizedResponse(
-            'Provide User Name and Password to access this page.',
-            )
-        }
-        const credentials = parseCredentials(authorization)
-        if (credentials[0] !== env.AUTH_USERNAME || credentials[1] !== env.AUTH_PASSWORD) {
-            return getUnauthorizedResponse(
-            'The User Name and Password combination you have entered is invalid.',
-            )
-        }
-
-        const originResponse = await fetch(request);
-
         const path = url.pathname;
 
         const siteConfig = getSiteConfig(env, domain);
         if (!siteConfig) {
-            // TODO: Should send a email to notify the admin
-            return originResponse;
+            return fetch(request);
         }
+
+        // Handle search (public, no auth required)
+        const searchQuery = url.searchParams.get('q');
+        if (searchQuery && searchQuery.trim() !== '') {
+            const query = searchQuery.trim();
+            const bucket = siteConfig.bucket;
+            const index = await listBucket(bucket, {
+                include: ['httpMetadata', 'customMetadata'],
+            });
+
+            const lowerQuery = query.toLowerCase();
+            const files = index.objects.filter((obj) => {
+                if (obj.key.toLowerCase().includes(lowerQuery)) return true;
+                const desp = siteConfig.desp['/' + obj.key];
+                if (desp && desp.toLowerCase().includes(lowerQuery)) return true;
+                return false;
+            });
+
+            // Extract unique folder paths from matching files and all folders
+            const folderSet = new Set<string>();
+            for (const obj of index.objects) {
+                const parts = obj.key.split('/');
+                for (let i = 1; i < parts.length; i++) {
+                    folderSet.add(parts.slice(0, i).join('/') + '/');
+                }
+            }
+            const folders = Array.from(folderSet).filter((folder) => {
+                if (folder.toLowerCase().includes(lowerQuery)) return true;
+                const desp = siteConfig.desp['/' + folder.slice(0, -1)];
+                if (desp && desp.toLowerCase().includes(lowerQuery)) return true;
+                return false;
+            });
+
+            if (siteConfig.sortFn?.files) {
+                files.sort(siteConfig.sortFn.files);
+            }
+            if (siteConfig.sortFn?.folders) {
+                folders.sort(siteConfig.sortFn.folders);
+            }
+
+            return new Response(renderSearchResults(files, folders, query, siteConfig), {
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                status: 200,
+            });
+        }
+
         // remove the leading '/'
         const objectKey = siteConfig.decodeURI ? decodeURIComponent(path.slice(1)) : path.slice(1);
+
+        // File downloads (non-directory paths) require Basic Auth
+        if (path.slice(-1) !== '/') {
+            const authorization = request.headers.get('authorization');
+            if (!authorization) {
+                return getUnauthorizedResponse(
+                'Ange användarnamn och lösenord för att ladda ner filer.',
+                );
+            }
+            const credentials = parseCredentials(authorization);
+            if (credentials[0] !== env.AUTH_USERNAME || credentials[1] !== env.AUTH_PASSWORD) {
+                return getUnauthorizedResponse(
+                'Felaktigt användarnamn eller lösenord.',
+                );
+            }
+        }
+
+        const originResponse = await fetch(request);
 
         // Handle redirect if configured
         if (siteConfig.redirect) {
@@ -170,7 +218,7 @@ export default {
         if (files.length === 0 && folders.length === 0 && originResponse.status === 404) {
             return originResponse;
         }
-        return new Response(renderTemplFull(files, folders, '/' + objectKey, siteConfig), {
+        return new Response(renderTemplFull(files, folders, '/' + objectKey, siteConfig, searchQuery ?? undefined), {
             headers: {
                 'Content-Type': 'text/html; charset=utf-8',
             },

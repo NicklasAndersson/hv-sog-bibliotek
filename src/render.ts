@@ -1,7 +1,7 @@
 import { svgs, cssStyle, defaultFavicon } from './static';
 import { SiteConfig } from './types';
 
-export var renderTemplFull = (files: R2Object[], folders: string[], path: string, config: SiteConfig) => {
+export var renderTemplFull = (files: R2Object[], folders: string[], path: string, config: SiteConfig, query?: string) => {
     return `<!DOCTYPE html>
     <html>
     <head>
@@ -19,6 +19,7 @@ export var renderTemplFull = (files: R2Object[], folders: string[], path: string
                 <a href="/">${config.name}</a> /
                 <!-- breadcrumbs start -->${renderTemplBreadcrumbs(path)}
         </h1>
+        ${renderSearchForm(query)}
     </header>
     <main>
             <div class="listing">
@@ -170,6 +171,95 @@ function findDesp(siteConfig: SiteConfig, path: string, exact: boolean): string 
     const desp = siteConfig.desp[longestMatch];
     return desp;
 }
+
+var renderSearchForm = (query?: string) => {
+    const escapedQuery = query ? query.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+    return `<form class="search-form" method="GET" action="/">
+        <input type="search" name="q" placeholder="Search files and folders..." value="${escapedQuery}" aria-label="Search">
+        <button type="submit">Search</button>
+    </form>`;
+};
+
+export var renderSearchResults = (files: R2Object[], folders: string[], query: string, config: SiteConfig) => {
+    const escapedQuery = query.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const totalResults = files.length + folders.length;
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <link rel="icon" href="${config.favicon ?? defaultFavicon}" type="image/png">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${config.name} | Search: ${escapedQuery}</title>
+        ${cssStyle}
+    </head>
+    <body>
+    ${svgs}
+    <header>
+        <h1>
+                <a href="/">${config.name}</a>
+        </h1>
+        ${renderSearchForm(query)}
+    </header>
+    <div class="search-info">${totalResults} result${totalResults !== 1 ? 's' : ''} for &ldquo;${escapedQuery}&rdquo;<a href="/">Clear search</a></div>
+    <main>
+            <div class="listing">
+                <table aria-describedby="summary">
+                    <thead>
+                    <tr>
+                        <th class="hideable"></th>
+                        <th class="name">Name</th>
+                        <th class="description">Description</th>
+                        <th class="size">Size</th>
+                        <th class="date hideable">Modified</th>
+                        <th class="hideable"></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+    <!-- folders start -->${renderSearchFolders(folders, config)}
+    <!-- files start -->${renderSearchFiles(files, config)}
+    </tbody>
+                </table>
+            </div>
+        </main>
+        <footer>
+            ${generateFooter(config, '/')}
+        </footer>
+    </body>
+</html>
+    `;
+};
+
+var renderSearchFolders = (folders: string[], siteConfig: SiteConfig) => {
+    if (!folders || folders.length === 0) return '';
+    var output = '';
+    for (var i = 0; i < folders.length; i++) {
+        output += `<tr class="file ">
+                            <td class="hideable"></td>
+                            <td class="name"><a href="/${folders[i]}"><svg width="1.5em" height="1em" version="1.1" viewBox="0 0 317 259"><use xlink:href="#folder"></use></svg><span class="name">${folders[i]}</span></a></td>
+                            <td class="description">${findDesp(siteConfig, '/' + folders[i].slice(0, -1), true) ?? '&mdash;'}</td>
+                            <td class="size">&mdash;</td>
+                            <td class="date hideable">&mdash;</td>
+                            <td class="hideable"></td>
+                        </tr>`;
+    }
+    return output;
+};
+
+var renderSearchFiles = (files: R2Object[], siteConfig: SiteConfig) => {
+    if (!files || files.length === 0) return '';
+    var output = '';
+    for (var i = 0; i < files.length; i++) {
+        output += `<tr class="file ">
+                            <td class="hideable"></td>
+                            <td class="name"><a href="/${files[i].key}"><svg width="1.5em" height="1em" version="1.1" viewBox="0 0 265 323"><use xlink:href="#file"></use></svg><span class="name">${files[i].key}</span></a></td>
+                            <td class="description">${findDesp(siteConfig, '/' + files[i].key, true) ?? '&mdash;'}</td>
+                            <td class="size">${humanFileSize(files[i].size)}</td>
+                            <td class="date hideable"><time datetime="${files[i].uploaded.toUTCString()}">${files[i].uploaded.toJSON()}</time></td>
+                            <td class="hideable"></td>
+                        </tr>`;
+    }
+    return output;
+};
 
 function generateFooter(siteConfig: SiteConfig, path: string): string {
     /// Footer includes:

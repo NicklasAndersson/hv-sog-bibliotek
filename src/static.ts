@@ -184,6 +184,39 @@ footer {
 footer p {
     margin-bottom: 0.5em;
 }
+.search-form {
+    margin-top: 10px;
+    display: flex;
+    gap: 6px;
+}
+.search-form input[type="search"] {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-family: sans-serif;
+}
+.search-form button {
+    padding: 6px 14px;
+    font-size: 14px;
+    background-color: #006ed3;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.search-form button:hover {
+    background-color: #319cff;
+}
+.search-info {
+    padding: 10px 5%;
+    font-size: 14px;
+    color: #666;
+}
+.search-info a {
+    margin-left: 1em;
+}
 @media (max-width: 600px) {
     .hideable {
         display: none;

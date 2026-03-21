@@ -13,10 +13,10 @@ R2 Directory Listing is a Cloudflare Worker that serves HTML directory listings 
 
 | File | Purpose |
 |---|---|
-| `src/index.ts` | Worker entry point (`fetch` handler). Handles Basic Auth, origin fetch, redirect logic, R2 listing, and response generation. |
+| `src/index.ts` | Worker entry point (`fetch` handler). Handles Basic Auth, origin fetch, redirect logic, R2 listing, full-bucket search (`?q=`), and response generation. |
 | `src/config.ts` | Site configuration (domain → `SiteConfig` mapping). **Gitignored** — each deployment has its own. |
 | `src/types.ts` | TypeScript types: `Env` (R2 bucket bindings), `SiteConfig` (per-site options including redirect, sorting, descriptions). |
-| `src/render.ts` | HTML template rendering: directory listing page with breadcrumbs, folder/file rows, footer. |
+| `src/render.ts` | HTML template rendering: directory listing page with breadcrumbs, folder/file rows, search bar, search results page, footer. |
 | `src/static.ts` | Static assets: SVG icons and CSS inlined into the HTML response. |
 | `wrangler.toml` | Wrangler config (routes, R2 bindings, observability). **Gitignored**. |
 
@@ -27,6 +27,7 @@ R2 Directory Listing is a Cloudflare Worker that serves HTML directory listings 
 - **Basic Auth** is implemented directly in the worker entry point in `src/index.ts`. Credentials are read from Wrangler secrets (`AUTH_USERNAME`, `AUTH_PASSWORD`) via the `Env` type — never hardcode them.
 - **R2 API** — uses the Workers R2 bindings (`R2Bucket`, `R2Object`, `R2ListOptions`). Pagination is handled by `listBucket()`.
 - **HTML generation** — template literals, no framework. Output is a single self-contained HTML page.
+- **Search** — server-side full-bucket search via `?q=` query parameter. Lists all R2 objects (no prefix/delimiter), filters by case-insensitive `includes()` on object keys and `desp` descriptions. Search bar appears in the header of every directory listing page.
 
 ## Security — Public Repo
 
@@ -42,7 +43,7 @@ This repo is **public**. Never commit secrets, credentials, or deployment-specif
 - **Domain**: `bibliotek.hv-sog.se`
 - **Bucket**: `bibliotek`
 - **Route**: `bibliotek.hv-sog.se/*` on zone `hv-sog.se`
-- **Last deploy**: 2025-01-30
+- **Last deploy**: 2026-03-21
 
 ## Development
 
