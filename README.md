@@ -1,42 +1,67 @@
 # R2 Directory Listing
 
-This is a simple Directory Listing script for [Cloudflare R2](https://developers.cloudflare.com/r2/) and hosted on [Cloudflare Workers](https://workers.cloudflare.com/). It is inspired by the [Directory Listing of Gitea downloads site](https://blog.gitea.com/evolution-of-the-gitea-downloads-site/).
+A Cloudflare Worker that generates HTML directory listings for [Cloudflare R2](https://developers.cloudflare.com/r2/) buckets. Forked from [cmj2002/r2-dir-list](https://github.com/cmj2002/r2-dir-list).
 
-## Usage
+Currently deployed at **bibliotek.hv-sog.se** serving the `bibliotek` R2 bucket (HV-SOG document library).
 
-Clone this repository, install dependencies and edit the configs:
+## Setup
 
 ```bash
-git clone https://github.com/cmj2002/r2-dir-list.git
-cd r2-dir-list
 npm install
-mv src/config.ts.example src/config.ts
-mv wrangler.toml.example wrangler.toml
 ```
 
-You should edit:
+Create your deployment-specific config files (these are gitignored):
 
--   `bucketname` in `src/config.ts` and `wrangler.toml` to your bucket name.
--   `bucketdomain.example.com` in `src/config.ts` and `wrangler.toml` to your bucket domain. **It must have been set as a [custom domain](https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains) of your Cloudflare R2 bucket**.
--   `example.com` in `wrangler.toml`'s `zone_name` to yours.
--   Other settings like `name`, `desp`, `showPoweredBy` and `legalInfo` in `src/config.ts` to your own.
+- `src/config.ts` — site configuration (domain, bucket binding, descriptions, favicon, etc.)
+- `wrangler.toml` — Wrangler configuration (routes, R2 bindings, zone)
 
-You may want to search `bucketdomain`, `bucketname` and `example.com` in your code to ensure you have edited all of them.
+See `src/config.ts.example` and `wrangler.toml.example` in the upstream repo for templates.
 
-Then you can run `wrangler deploy` to deploy it to your Cloudflare Workers.
+### Configuration
 
-## Demo
+In `src/config.ts`, configure a `SiteConfig` per domain:
 
-https://datasets.caomingjun.com/
+- `name` — site title shown in the header
+- `bucket` — R2 bucket binding from `Env`
+- `desp` — path-specific descriptions shown in the listing and footer
+- `decodeURI` — decode URI-encoded object keys (recommended)
+- `favicon` — URL to a PNG favicon
+- `showPoweredBy` — show/hide footer attribution
+- `legalInfo` — optional legal text in footer (raw HTML)
+- `redirect` — optional async function for key redirects
+- `sortFn` — optional custom sort functions for files and folders
+- `dangerousOverwriteZeroByteObject` — allow listing even when a 0-byte object exists at the path
 
-This is a production website of mine, which hosts some machine learning datasets used in my papers and codes to share with other reserchers. It is a Cloudflare R2 bucket with this worker in front of it.
+In `wrangler.toml`, configure:
 
-## How it works
+- `routes` — domain pattern and zone name
+- `r2_buckets` — bucket binding name and bucket name
 
-It will only overwrite the response when all of the following conditions are met:
+## Development
 
--   Response from R2 has a status of 404
--   The requested pathname ends with `/`
--   There exist "subdirectories" or "files" under the current "directory" (The quotation marks here are used because directories and files are abstract concepts in object storage)
+```bash
+npm run dev      # local dev server (wrangler dev)
+npm run deploy   # deploy to Cloudflare Workers
+```
 
-In such a case, it will generate a HTML page with the list of "subdirectories" and "files" under the current "directory" and return it. Otherwise, it will just return the response from R2. So **putting this worker in front of your R2 bucket will not affect any normal access to your bucket**.
+## How It Works
+
+The worker sits in front of an R2 bucket via a custom domain. It intercepts responses and generates a directory listing page when **all** of the following are true:
+
+- The response from R2 is a 404
+- The requested path ends with `/`
+- There are objects or prefixes under that path in the bucket
+
+Otherwise, the original R2 response is returned unchanged — normal object access is unaffected.
+
+The worker also implements Basic Auth to restrict access.
+
+## Project Structure
+
+| File | Purpose |
+|---|---|
+| `src/index.ts` | Worker entry point — auth, origin fetch, redirect, R2 listing |
+| `src/config.ts` | Per-domain site configuration (**gitignored**) |
+| `src/types.ts` | TypeScript types (`Env`, `SiteConfig`) |
+| `src/render.ts` | HTML template rendering (directory listing page) |
+| `src/static.ts` | Inlined SVG icons and CSS |

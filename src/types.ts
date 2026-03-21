@@ -1,5 +1,8 @@
 export type Env = {
     [K in `BUCKET_${string}`]: R2Bucket;
+} & {
+    AUTH_USERNAME: string;
+    AUTH_PASSWORD: string;
 };
 
 export interface SiteConfig {

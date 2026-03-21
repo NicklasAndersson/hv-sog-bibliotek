@@ -34,6 +34,15 @@ async function listBucket(bucket: R2Bucket, options?: R2ListOptions): Promise<R2
     };
 }
 
+function generateSitemap(domain: string, objects: R2Object[], decodeURI: boolean): string {
+    const urls = objects.map((obj) => {
+        const key = decodeURI ? encodeURIComponent(obj.key).replace(/%2F/g, '/') : obj.key;
+        const lastmod = obj.uploaded.toISOString().split('T')[0];
+        return `  <url>\n    <loc>https://${domain}/${key}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`;
+    });
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`;
+}
+
 function shouldReturnOriginResponse(originResponse: Response, siteConfig: SiteConfig): boolean {
     const isNotEndWithSlash = originResponse.url.slice(-1) !== '/';
     const is404 = originResponse.status === 404;
@@ -49,12 +58,67 @@ function shouldReturnOriginResponse(originResponse: Response, siteConfig: SiteCo
     }
 }
 
+/**
+ * Break down base64 encoded authorization string into plain-text username and password
+ * @param {string} authorization
+ * @returns {string[]}
+ */
+function parseCredentials(authorization) {
+    const parts = authorization.split(' ')
+    const plainAuth = atob(parts[1])
+    const credentials = plainAuth.split(':')
+    return credentials
+  }
+  /**
+   * Helper funtion to generate Response object
+   * @param {string} message
+   * @returns {Response}
+   */
+  function getUnauthorizedResponse(message) {
+    let response = new Response(message, {
+      status: 401,
+    })
+    response.headers.set('WWW-Authenticate', 'Basic realm="Secure Area"')
+    return response
+  }
+  
+
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        const originResponse = await fetch(request);
-
         const url = new URL(request.url);
         const domain = url.hostname;
+
+        // Serve sitemap.xml without auth
+        if (url.pathname === '/sitemap.xml') {
+            const siteConfig = getSiteConfig(env, domain);
+            if (!siteConfig) {
+                return new Response('Not found', { status: 404 });
+            }
+            const index = await listBucket(siteConfig.bucket);
+            const xml = generateSitemap(domain, index.objects, siteConfig.decodeURI ?? false);
+            return new Response(xml, {
+                headers: {
+                    'Content-Type': 'application/xml; charset=utf-8',
+                    'Cache-Control': 'public, max-age=3600',
+                },
+            });
+        }
+
+        const authorization = request.headers.get('authorization')
+        if (!request.headers.has('authorization')) {
+            return getUnauthorizedResponse(
+            'Provide User Name and Password to access this page.',
+            )
+        }
+        const credentials = parseCredentials(authorization)
+        if (credentials[0] !== env.AUTH_USERNAME || credentials[1] !== env.AUTH_PASSWORD) {
+            return getUnauthorizedResponse(
+            'The User Name and Password combination you have entered is invalid.',
+            )
+        }
+
+        const originResponse = await fetch(request);
+
         const path = url.pathname;
 
         const siteConfig = getSiteConfig(env, domain);
