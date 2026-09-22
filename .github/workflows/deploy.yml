@@ -1,0 +1,44 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      # wrangler.toml and src/config.ts are deployment-specific and
+      # intentionally gitignored (see AGENTS.md / README) since this repo is
+      # public. They're reconstructed here from repo secrets so they never
+      # touch git history.
+      - name: Write deployment-specific config
+        env:
+          WRANGLER_TOML: ${{ secrets.WRANGLER_TOML }}
+          SITE_CONFIG_TS: ${{ secrets.SITE_CONFIG_TS }}
+        run: |
+          if [ -z "$WRANGLER_TOML" ] || [ -z "$SITE_CONFIG_TS" ]; then
+            echo "::error::Missing WRANGLER_TOML and/or SITE_CONFIG_TS repository secret." >&2
+            exit 1
+          fi
+          printf '%s' "$WRANGLER_TOML" > wrangler.toml
+          printf '%s' "$SITE_CONFIG_TS" > src/config.ts
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
