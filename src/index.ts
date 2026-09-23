@@ -35,7 +35,7 @@ async function listBucket(bucket: R2Bucket, options?: R2ListOptions): Promise<R2
 }
 
 function shouldReturnOriginResponse(originResponse: Response, siteConfig: SiteConfig): boolean {
-    const isNotEndWithSlash = originResponse.url.slice(-1) !== '/';
+    const isNotEndWithSlash = new URL(originResponse.url).pathname.slice(-1) !== '/';
     const is404 = originResponse.status === 404;
     const isZeroByte = originResponse.headers.get('Content-Length') === '0';
     const overwriteZeroByteObject = (siteConfig.dangerousOverwriteZeroByteObject ?? false) && isZeroByte;
@@ -197,7 +197,10 @@ export default {
                 }
                 return new Response(null, {
                     status: 303,
-                    headers: { Location: path.slice(0, path.lastIndexOf('/') + 1), 'Set-Cookie': await createSessionCookie(env) },
+                    headers: {
+                        Location: path.slice(0, path.lastIndexOf('/') + 1) + '?download=' + encodeURIComponent(path.slice(path.lastIndexOf('/') + 1)),
+                        'Set-Cookie': await createSessionCookie(env),
+                    },
                 });
             }
 
@@ -265,7 +268,7 @@ export default {
         if (files.length === 0 && folders.length === 0 && originResponse.status === 404) {
             return originResponse;
         }
-        return new Response(renderTemplFull(files, folders, '/' + objectKey, siteConfig, searchQuery ?? undefined), {
+        return new Response(renderTemplFull(files, folders, '/' + objectKey, siteConfig, searchQuery ?? undefined, url.searchParams.get('download') ?? undefined), {
             headers: {
                 'Content-Type': 'text/html; charset=utf-8',
             },

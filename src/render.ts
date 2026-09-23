@@ -102,7 +102,17 @@ export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: 
     `;
 };
 
-export var renderTemplFull = (files: R2Object[], folders: string[], path: string, config: SiteConfig, query?: string) => {
+// "./" prefix keeps the href relative, so a crafted value can't become a javascript: URL.
+var renderAutoDownload = (name?: string) => {
+    if (!name) return '';
+    return `<a id="auto-download" href="./${escapeHtml(name)}" download hidden></a>
+        <script>
+            document.getElementById('auto-download').click();
+            history.replaceState(null, '', location.pathname);
+        </script>`;
+};
+
+export var renderTemplFull = (files: R2Object[], folders: string[], path: string, config: SiteConfig, query?: string, download?: string) => {
     return `<!DOCTYPE html>
     <html>
     <head>
@@ -146,6 +156,7 @@ export var renderTemplFull = (files: R2Object[], folders: string[], path: string
         <footer>
             ${generateFooter(config, path)}
         </footer>
+        ${renderAutoDownload(download)}
     </body>
 </html>
     `;
