@@ -139,9 +139,20 @@ export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: 
                 })
                 .then(function (blob) {
                     var filename = decodeURIComponent(targetPath.split('/').filter(Boolean).pop() || targetPath);
-                    var file = new File([blob], filename, { type: blob.type });
-                    var url = URL.createObjectURL(file);
-                    window.location.replace(url);
+                    var url = URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    // Delay revoke: some browsers start the download asynchronously
+                    // and revoking immediately can cancel it.
+                    setTimeout(function () {
+                        URL.revokeObjectURL(url);
+                    }, 1000);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Ladda ner';
                 })
                 .catch(function (err) {
                     errorBox.textContent = err.message || 'Något gick fel. Försök igen.';
