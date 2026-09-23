@@ -1,5 +1,5 @@
 import { Env, SiteConfig } from './types';
-import { renderTemplFull, renderSearchResults } from './render';
+import { renderTemplFull, renderSearchResults, renderAuthPrompt } from './render';
 import { getSiteConfig } from './config';
 
 async function listBucket(bucket: R2Bucket, options?: R2ListOptions): Promise<R2Objects> {
@@ -66,22 +66,25 @@ function parseCredentials(authorization: string) {
    * @returns {Response}
    */
   function getUnauthorizedResponse(message: string) {
-    let response = new Response(message, {
+    // No WWW-Authenticate header: file downloads are guarded by the custom
+    // login dialog (renderAuthPrompt) instead of the browser's native Basic
+    // Auth prompt, so we never want the browser popping up its own dialog.
+    return new Response(message, {
       status: 401,
     })
-    response.headers.set('WWW-Authenticate', 'Basic realm="Secure Area"')
-    return response
   }
-  
+
 
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
         const url = new URL(request.url);
         const domain = url.hostname;
 
-        // Serve robots.txt
+        // Serve robots.txt — browsing/search is public and should be
+        // indexable; file downloads are separately gated by Basic Auth
+        // below, so crawlers requesting a file simply get a 401.
         if (url.pathname === '/robots.txt') {
-            return new Response('User-agent: *\nDisallow: /\n', {
+            return new Response('User-agent: *\nAllow: /\n', {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Cache-Control': 'public, max-age=86400',
@@ -151,7 +154,17 @@ export default {
         // File downloads (non-directory paths) require Basic Auth
         if (path.slice(-1) !== '/') {
             const authorization = request.headers.get('authorization');
+            const acceptsHtml = (request.headers.get('accept') ?? '').includes('text/html');
             if (!authorization) {
+                if (acceptsHtml) {
+                    // Show a custom login dialog instead of relying on the
+                    // browser's native Basic Auth prompt (which some
+                    // browsers/webviews fail to surface for direct file links).
+                    return new Response(renderAuthPrompt(path, siteConfig), {
+                        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                        status: 401,
+                    });
+                }
                 return getUnauthorizedResponse(
                 'Ange användarnamn och lösenord för att ladda ner filer.',
                 );

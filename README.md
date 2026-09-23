@@ -63,7 +63,7 @@ npx wrangler secret put AUTH_USERNAME
 npx wrangler secret put AUTH_PASSWORD
 ```
 
-When a user clicks a file link, the browser prompts for credentials. Once entered, the browser caches them for the session.
+When a user clicks a file link, the worker serves a custom HTML login dialog (instead of the browser's native Basic Auth prompt, which some browsers/webviews fail to surface). The dialog submits credentials via `fetch` with a Basic `Authorization` header and downloads the file client-side on success. Non-browser clients (curl, wget, etc.) get a plain 401 response with no `WWW-Authenticate` header, since auth is handled entirely by the dialog.
 
 ### Search
 

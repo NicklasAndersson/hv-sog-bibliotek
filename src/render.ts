@@ -1,6 +1,175 @@
 import { svgs, cssStyle, defaultFavicon } from './static';
 import { SiteConfig } from './types';
 
+var escapeHtml = (value: string) => {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+};
+
+// Embeds a string as a JS string literal inside an inline <script> block,
+// escaping "</" so the payload can never prematurely close the script tag.
+var toScriptLiteral = (value: string) => {
+    return JSON.stringify(value).replace(/<\//g, '<\\/');
+};
+
+export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: string) => {
+    const filename = decodeURIComponent(path.split('/').filter(Boolean).pop() ?? path);
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <link rel="icon" href="${config.favicon ?? defaultFavicon}" type="image/png">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${escapeHtml(config.name)} | Inloggning krävs</title>
+        ${cssStyle}
+        <style>
+        .auth-main {
+            display: flex;
+            justify-content: center;
+            padding: 40px 5%;
+        }
+        .auth-dialog {
+            width: 100%;
+            max-width: 360px;
+            border: 1px solid #dadada;
+            border-radius: 6px;
+            padding: 24px;
+        }
+        .auth-dialog h2 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+        .auth-dialog p {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 16px;
+            word-break: break-word;
+        }
+        .auth-dialog label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .auth-dialog input {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            margin-bottom: 14px;
+            font-family: sans-serif;
+            box-sizing: border-box;
+        }
+        .auth-dialog button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            background-color: #006ed3;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .auth-dialog button:hover {
+            background-color: #319cff;
+        }
+        .auth-dialog button:disabled {
+            background-color: #9cc7ea;
+            cursor: default;
+        }
+        .auth-error {
+            font-size: 13px;
+            color: #c0392b;
+            margin-bottom: 14px;
+        }
+        </style>
+    </head>
+    <body>
+    <header>
+        <h1>
+            <a href="/">${escapeHtml(config.name)}</a>
+        </h1>
+    </header>
+    <main class="auth-main">
+        <div class="auth-dialog">
+            <h2>Inloggning krävs</h2>
+            <p>Ange användarnamn och lösenord för att ladda ner &ldquo;${escapeHtml(filename)}&rdquo;.</p>
+            <form id="auth-form">
+                <label for="auth-username">Användarnamn</label>
+                <input type="text" id="auth-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" required autofocus>
+                <label for="auth-password">Lösenord</label>
+                <input type="password" id="auth-password" name="password" autocomplete="current-password" required>
+                <div id="auth-error" class="auth-error"${errorMessage ? '' : ' hidden'}>${errorMessage ? escapeHtml(errorMessage) : ''}</div>
+                <button type="submit" id="auth-submit">Ladda ner</button>
+            </form>
+        </div>
+    </main>
+    <script>
+    (function () {
+        var targetPath = ${toScriptLiteral(path)};
+        var form = document.getElementById('auth-form');
+        var errorBox = document.getElementById('auth-error');
+        var submitBtn = document.getElementById('auth-submit');
+        var usernameInput = document.getElementById('auth-username');
+        var passwordInput = document.getElementById('auth-password');
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            errorBox.hidden = true;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Laddar ner…';
+
+            fetch(targetPath, {
+                headers: {
+                    Authorization: 'Basic ' + btoa(unescape(encodeURIComponent(usernameInput.value)) + ':' + unescape(encodeURIComponent(passwordInput.value))),
+                },
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        var message =
+                            response.status === 401
+                                ? 'Felaktigt användarnamn eller lösenord.'
+                                : 'Kunde inte hämta filen (fel ' + response.status + ').';
+                        throw new Error(message);
+                    }
+                    return response.blob();
+                })
+                .then(function (blob) {
+                    var filename = decodeURIComponent(targetPath.split('/').filter(Boolean).pop() || targetPath);
+                    var url = URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    // Delay revoke: some browsers start the download asynchronously
+                    // and revoking immediately can cancel it.
+                    setTimeout(function () {
+                        URL.revokeObjectURL(url);
+                    }, 1000);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Ladda ner';
+                })
+                .catch(function (err) {
+                    errorBox.textContent = err.message || 'Något gick fel. Försök igen.';
+                    errorBox.hidden = false;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Ladda ner';
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                });
+        });
+    })();
+    </script>
+    </body>
+</html>
+    `;
+};
+
 export var renderTemplFull = (files: R2Object[], folders: string[], path: string, config: SiteConfig, query?: string) => {
     return `<!DOCTYPE html>
     <html>
