@@ -9,12 +9,6 @@ var escapeHtml = (value: string) => {
         .replace(/"/g, '&quot;');
 };
 
-// Embeds a string as a JS string literal inside an inline <script> block,
-// escaping "</" so the payload can never prematurely close the script tag.
-var toScriptLiteral = (value: string) => {
-    return JSON.stringify(value).replace(/<\//g, '<\\/');
-};
-
 export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: string) => {
     const filename = decodeURIComponent(path.split('/').filter(Boolean).pop() ?? path);
     return `<!DOCTYPE html>
@@ -76,10 +70,6 @@ export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: 
         .auth-dialog button:hover {
             background-color: #319cff;
         }
-        .auth-dialog button:disabled {
-            background-color: #9cc7ea;
-            cursor: default;
-        }
         .auth-error {
             font-size: 13px;
             color: #c0392b;
@@ -97,74 +87,16 @@ export var renderAuthPrompt = (path: string, config: SiteConfig, errorMessage?: 
         <div class="auth-dialog">
             <h2>Inloggning krävs</h2>
             <p>Ange användarnamn och lösenord för att ladda ner &ldquo;${escapeHtml(filename)}&rdquo;.</p>
-            <form id="auth-form">
+            <form method="POST" action="${escapeHtml(path)}">
                 <label for="auth-username">Användarnamn</label>
                 <input type="text" id="auth-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" required autofocus>
                 <label for="auth-password">Lösenord</label>
                 <input type="password" id="auth-password" name="password" autocomplete="current-password" required>
-                <div id="auth-error" class="auth-error"${errorMessage ? '' : ' hidden'}>${errorMessage ? escapeHtml(errorMessage) : ''}</div>
-                <button type="submit" id="auth-submit">Ladda ner</button>
+                ${errorMessage ? `<div class="auth-error">${escapeHtml(errorMessage)}</div>` : ''}
+                <button type="submit">Logga in</button>
             </form>
         </div>
     </main>
-    <script>
-    (function () {
-        var targetPath = ${toScriptLiteral(path)};
-        var form = document.getElementById('auth-form');
-        var errorBox = document.getElementById('auth-error');
-        var submitBtn = document.getElementById('auth-submit');
-        var usernameInput = document.getElementById('auth-username');
-        var passwordInput = document.getElementById('auth-password');
-
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            errorBox.hidden = true;
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Laddar ner…';
-
-            fetch(targetPath, {
-                headers: {
-                    Authorization: 'Basic ' + btoa(unescape(encodeURIComponent(usernameInput.value)) + ':' + unescape(encodeURIComponent(passwordInput.value))),
-                },
-            })
-                .then(function (response) {
-                    if (!response.ok) {
-                        var message =
-                            response.status === 401
-                                ? 'Felaktigt användarnamn eller lösenord.'
-                                : 'Kunde inte hämta filen (fel ' + response.status + ').';
-                        throw new Error(message);
-                    }
-                    return response.blob();
-                })
-                .then(function (blob) {
-                    var filename = decodeURIComponent(targetPath.split('/').filter(Boolean).pop() || targetPath);
-                    var url = URL.createObjectURL(blob);
-                    var link = document.createElement('a');
-                    link.href = url;
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    // Delay revoke: some browsers start the download asynchronously
-                    // and revoking immediately can cancel it.
-                    setTimeout(function () {
-                        URL.revokeObjectURL(url);
-                    }, 1000);
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Ladda ner';
-                })
-                .catch(function (err) {
-                    errorBox.textContent = err.message || 'Något gick fel. Försök igen.';
-                    errorBox.hidden = false;
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Ladda ner';
-                    passwordInput.value = '';
-                    passwordInput.focus();
-                });
-        });
-    })();
-    </script>
     </body>
 </html>
     `;

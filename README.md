@@ -63,7 +63,7 @@ npx wrangler secret put AUTH_USERNAME
 npx wrangler secret put AUTH_PASSWORD
 ```
 
-When a user clicks a file link, the worker serves a custom HTML login dialog (instead of the browser's native Basic Auth prompt, which some browsers/webviews fail to surface). The dialog submits credentials via `fetch` with a Basic `Authorization` header and downloads the file client-side on success. Non-browser clients (curl, wget, etc.) get a plain 401 response with no `WWW-Authenticate` header, since auth is handled entirely by the dialog.
+When a user without a session clicks a file link, the worker serves a custom HTML login form (instead of the browser's native Basic Auth prompt, which some browsers/webviews fail to surface). The form POSTs to the file URL; on success the worker sets an HMAC-signed `session` cookie (HttpOnly, valid 30 days) and redirects back to the file. Changing `AUTH_PASSWORD` invalidates all sessions. Non-browser clients (curl, wget, etc.) can send a Basic `Authorization` header instead, and otherwise get a plain 401.
 
 ### Search
 

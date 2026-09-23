@@ -60,6 +60,39 @@ function parseCredentials(authorization: string) {
     const credentials = plainAuth.split(':')
     return credentials
   }
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+
+// Keyed on the credentials, so changing AUTH_PASSWORD invalidates every session.
+function sessionKey(env: Env) {
+    return crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(`${env.AUTH_USERNAME}:${env.AUTH_PASSWORD}`),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign', 'verify'],
+    );
+}
+
+async function createSessionCookie(env: Env): Promise<string> {
+    const exp = String(Date.now() + SESSION_MAX_AGE * 1000);
+    const sig = await crypto.subtle.sign('HMAC', await sessionKey(env), new TextEncoder().encode(exp));
+    const value = `${exp}.${btoa(String.fromCharCode(...new Uint8Array(sig)))}`;
+    return `session=${value}; Path=/; Max-Age=${SESSION_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+async function hasValidSession(request: Request, env: Env): Promise<boolean> {
+    const match = (request.headers.get('cookie') ?? '').match(/(?:^|;\s*)session=([^;]+)/);
+    if (!match) return false;
+    const [exp, sig] = match[1].split('.');
+    if (!sig || !(Number(exp) > Date.now())) return false;
+    try {
+        const sigBytes = Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
+        return await crypto.subtle.verify('HMAC', await sessionKey(env), sigBytes, new TextEncoder().encode(exp));
+    } catch {
+        return false;
+    }
+}
+
   /**
    * Helper funtion to generate Response object
    * @param {string} message
@@ -153,13 +186,31 @@ export default {
 
         // File downloads (non-directory paths) require Basic Auth
         if (path.slice(-1) !== '/') {
+            // Login form submission: set a session cookie and redirect back to the file.
+            if (request.method === 'POST') {
+                const form = await request.formData().catch(() => new FormData());
+                if (form.get('username') !== env.AUTH_USERNAME || form.get('password') !== env.AUTH_PASSWORD) {
+                    return new Response(renderAuthPrompt(path, siteConfig, 'Felaktigt användarnamn eller lösenord.'), {
+                        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+                        status: 401,
+                    });
+                }
+                return new Response(null, {
+                    status: 303,
+                    headers: { Location: path, 'Set-Cookie': await createSessionCookie(env) },
+                });
+            }
+
             const authorization = request.headers.get('authorization');
-            const acceptsHtml = (request.headers.get('accept') ?? '').includes('text/html');
-            if (!authorization) {
-                if (acceptsHtml) {
-                    // Show a custom login dialog instead of relying on the
-                    // browser's native Basic Auth prompt (which some
-                    // browsers/webviews fail to surface for direct file links).
+            if (authorization) {
+                const credentials = parseCredentials(authorization);
+                if (credentials[0] !== env.AUTH_USERNAME || credentials[1] !== env.AUTH_PASSWORD) {
+                    return getUnauthorizedResponse(
+                    'Felaktigt användarnamn eller lösenord.',
+                    );
+                }
+            } else if (!(await hasValidSession(request, env))) {
+                if ((request.headers.get('accept') ?? '').includes('text/html')) {
                     return new Response(renderAuthPrompt(path, siteConfig), {
                         headers: { 'Content-Type': 'text/html; charset=utf-8' },
                         status: 401,
@@ -167,12 +218,6 @@ export default {
                 }
                 return getUnauthorizedResponse(
                 'Ange användarnamn och lösenord för att ladda ner filer.',
-                );
-            }
-            const credentials = parseCredentials(authorization);
-            if (credentials[0] !== env.AUTH_USERNAME || credentials[1] !== env.AUTH_PASSWORD) {
-                return getUnauthorizedResponse(
-                'Felaktigt användarnamn eller lösenord.',
                 );
             }
         }
