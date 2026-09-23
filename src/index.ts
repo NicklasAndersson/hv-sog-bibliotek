@@ -186,7 +186,7 @@ export default {
 
         // File downloads (non-directory paths) require Basic Auth
         if (path.slice(-1) !== '/') {
-            // Login form submission: set a session cookie and redirect back to the file.
+            // Login form submission: set a session cookie and redirect back to the file's folder listing.
             if (request.method === 'POST') {
                 const form = await request.formData().catch(() => new FormData());
                 if (form.get('username') !== env.AUTH_USERNAME || form.get('password') !== env.AUTH_PASSWORD) {
@@ -197,7 +197,7 @@ export default {
                 }
                 return new Response(null, {
                     status: 303,
-                    headers: { Location: path, 'Set-Cookie': await createSessionCookie(env) },
+                    headers: { Location: path.slice(0, path.lastIndexOf('/') + 1), 'Set-Cookie': await createSessionCookie(env) },
                 });
             }
 
