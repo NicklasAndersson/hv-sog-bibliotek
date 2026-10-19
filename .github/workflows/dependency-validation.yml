@@ -1,0 +1,27 @@
+name: Verify Cloudflare dependency update
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/dependency-validation.yml'
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Generate CI-only config stub
+        run: |
+          cat > src/config.ts <<'EOF'
+          import type { Env, SiteConfig } from './types';
+          export function getSiteConfig(_env: Env, _domain: string): SiteConfig | undefined {
+            return undefined;
+          }
+          EOF
+      - run: npx tsc --noEmit
+      - run: npx wrangler --version
