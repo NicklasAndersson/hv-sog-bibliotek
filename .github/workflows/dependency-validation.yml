@@ -15,5 +15,13 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Generate CI-only config stub
+        run: |
+          cat > src/config.ts <<'EOF'
+          import type { Env, SiteConfig } from './types';
+          export function getSiteConfig(_env: Env, _domain: string): SiteConfig | undefined {
+            return undefined;
+          }
+          EOF
       - run: npx tsc --noEmit
       - run: npx wrangler --version
